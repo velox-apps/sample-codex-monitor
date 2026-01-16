@@ -1,0 +1,42 @@
+{
+  "$schema": "https://velox-apps.github.io/velox/schema.json",
+  "productName": "CodexMonitor",
+  "version": "0.5.0",
+  "identifier": "com.dimillian.codexmonitor",
+  "build": {
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "cd frontend && npm run dev",
+    "beforeBuildCommand": "cd frontend && npm run build",
+    "frontendDist": "frontend/dist"
+  },
+  "app": {
+    "withGlobalVelox": true,
+    "macOS": {
+      "privateApi": true
+    },
+    "security": {
+      "csp": null,
+      "defaultPluginCommandPolicy": "allow"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "CodexMonitor",
+        "width": 1200,
+        "height": 700,
+        "minWidth": 360,
+        "minHeight": 600,
+        "transparent": true,
+        "devtools": true,
+        "customProtocols": [
+          "app",
+          "ipc"
+        ],
+        "url": "app://localhost/"
+      }
+    ]
+  },
+  "bundle": {
+    "active": true
+  }
+}

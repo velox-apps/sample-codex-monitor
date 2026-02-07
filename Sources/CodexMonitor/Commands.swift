@@ -84,6 +84,7 @@ struct ListThreadsArgs: Codable, Sendable {
 struct AddWorkspaceArgs: Codable, Sendable {
   let path: String
   let codex_bin: String?
+  let codex_args: String?
 }
 
 struct AddWorktreeArgs: Codable, Sendable {
@@ -384,6 +385,7 @@ func registerCommands(
         let info = try await addWorkspace(
           path: args.path,
           codexBin: args.codex_bin,
+          codexArgs: args.codex_args,
           state: state,
           eventManager: eventManager
         )
@@ -491,11 +493,7 @@ func registerCommands(
         let trimmed = args.codexBin?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolved = (trimmed?.isEmpty == false) ? trimmed : defaultBin
         let version = try await CodexManager.checkCodexInstallation(codexBin: resolved)
-        var doctorArgs = ["app-server", "--help"]
-        if let extra = args.codexArgs?.trimmingCharacters(in: .whitespacesAndNewlines), !extra.isEmpty {
-          doctorArgs = extra.split(separator: " ").map(String.init) + doctorArgs
-        }
-        let process = try CodexManager.buildCodexProcess(codexBin: resolved, args: doctorArgs)
+        let process = try CodexManager.buildCodexProcess(codexBin: resolved, codexArgs: args.codexArgs, args: ["app-server", "--help"])
         let output = try await runProcess(process, timeout: 5)
         let appServerOk = output.status == 0
         let details = appServerOk ? nil : "Failed to run `codex app-server --help`."

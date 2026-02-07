@@ -1,7 +1,8 @@
-.PHONY: dev-frontend dev-backend dev build-frontend build clean
+.PHONY: dev-frontend dev-backend dev build-frontend build bundle run clean
 
 FRONTEND_DIR := ../original
 DIST_TARGET  := frontend/dist
+VELOX        := ../velox/.build/release/velox
 
 dev-frontend:
 	cd $(FRONTEND_DIR) && npm run dev
@@ -22,6 +23,16 @@ build-frontend:
 
 build: build-frontend
 	swift build -c release
+
+$(VELOX):
+	cd ../velox && swift build -c release --product velox
+
+bundle: build-frontend $(VELOX)
+	$(VELOX) build --bundle
+
+run: bundle
+	xattr -cr .build/release/CodexMonitor.app
+	open .build/release/CodexMonitor.app
 
 clean:
 	swift package clean

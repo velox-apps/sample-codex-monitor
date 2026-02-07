@@ -36,45 +36,50 @@ original/              Original Tauri/Rust app (reference)
 - Codex CLI available as `codex` in `PATH`
 - Git CLI
 
-## Run the Velox Port
+## Build and Run
 
-Install frontend dependencies:
+Install frontend dependencies once:
 
 ```bash
-cd velox-app/frontend
-npm install
+cd CodexMonitor && npm install
 ```
 
-Build velox once, this needs to be done before, so you do not trigger the SwiftPM sandbox:
+Build the Velox runtime once (avoids SwiftPM sandbox issues):
 
-```
-cd ../velox
-make
+```bash
+cd velox && make
 ```
 
-Run in dev mode:
+### Makefile targets
+
+From the `velox-app/` directory:
+
+| Target | Description |
+|--------|-------------|
+| `make dev` | Start Vite dev server and Swift backend together |
+| `make build` | Build the frontend and Swift binary (release) |
+| `make bundle` | Build the frontend, Swift binary, .app bundle, and DMG |
+| `make run` | Build everything, clear quarantine, and launch the app |
+| `make clean` | Remove build artifacts |
+
+Quick start:
 
 ```bash
 cd velox-app
-velox dev
+make run
 ```
 
-Build a production bundle:
+To run from the terminal with log output instead of `open`:
 
 ```bash
 cd velox-app
-velox build
+make bundle
+.build/release/CodexMonitor.app/Contents/MacOS/CodexMonitor
 ```
 
-## Sync the Frontend Copy
-
-The Velox app uses `velox-app/frontend` as its frontend root. If you edit the source in `CodexMonitor/`, sync it over before running:
-
-```bash
-rsync -a --exclude node_modules --exclude src-tauri --exclude dist --exclude .vite CodexMonitor/ velox-app/frontend/
-```
-
-You can also edit `velox-app/frontend` directly if you do not need the original tree.
+The app is not code-signed by default. `make run` clears the quarantine
+attribute automatically. If you launch manually, use
+`xattr -cr .build/release/CodexMonitor.app` first or right-click and choose Open.
 
 ## Using the App
 

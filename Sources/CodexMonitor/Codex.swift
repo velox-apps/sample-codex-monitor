@@ -129,6 +129,7 @@ enum CodexManager {
   static func spawnWorkspaceSession(
     entry: WorkspaceEntry,
     defaultCodexBin: String?,
+    codexArgs: String? = nil,
     eventManager: VeloxEventManager
   ) async throws -> WorkspaceSession {
     AppLogger.log("Spawning Codex session for \(entry.id) at \(entry.path)", level: .info)
@@ -136,7 +137,7 @@ enum CodexManager {
     let resolvedBin = (codexBin?.isEmpty ?? true) ? defaultCodexBin : codexBin
     _ = try await checkCodexInstallation(codexBin: resolvedBin)
 
-    let process = try buildCodexProcess(codexBin: resolvedBin, args: ["app-server"])
+    let process = try buildCodexProcess(codexBin: resolvedBin, codexArgs: codexArgs, args: ["app-server"])
     let stdinPipe = Pipe()
     let stdoutPipe = Pipe()
     let stderrPipe = Pipe()
@@ -219,18 +220,21 @@ enum CodexManager {
     return version.isEmpty ? nil : version
   }
 
-  static func buildCodexProcess(codexBin: String?, args: [String]) throws -> Process {
+  static func buildCodexProcess(codexBin: String?, codexArgs: String? = nil, args: [String]) throws -> Process {
     let trimmed = codexBin?.trimmingCharacters(in: .whitespacesAndNewlines)
     let useDefault = trimmed == nil || trimmed?.isEmpty == true
     let bin = useDefault ? "codex" : trimmed!
 
+    let extraArgs = parseCodexArgs(codexArgs)
+    let allArgs = extraArgs + args
+
     let process = Process()
     if bin.contains("/") {
       process.executableURL = URL(fileURLWithPath: bin)
-      process.arguments = args
+      process.arguments = allArgs
     } else {
       process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-      process.arguments = [bin] + args
+      process.arguments = [bin] + allArgs
     }
 
     var env = ProcessInfo.processInfo.environment
@@ -356,6 +360,81 @@ enum CodexManager {
       }
     }
   }
+}
+
+/// Parse a shell-like codex_args string into individual arguments.
+/// Handles single and double quoting, and backslash escapes outside quotes.
+func parseCodexArgs(_ value: String?) -> [String] {
+  guard let raw = value?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+    return []
+  }
+
+  var args: [String] = []
+  var current = ""
+  var inSingle = false
+  var inDouble = false
+  var escape = false
+
+  for ch in raw {
+    if escape {
+      current.append(ch)
+      escape = false
+      continue
+    }
+    if ch == "\\" && !inSingle {
+      escape = true
+      continue
+    }
+    if ch == "'" && !inDouble {
+      inSingle.toggle()
+      continue
+    }
+    if ch == "\"" && !inSingle {
+      inDouble.toggle()
+      continue
+    }
+    if ch.isWhitespace && !inSingle && !inDouble {
+      if !current.isEmpty {
+        args.append(current)
+        current = ""
+      }
+      continue
+    }
+    current.append(ch)
+  }
+  if !current.isEmpty {
+    args.append(current)
+  }
+  return args
+}
+
+/// Resolve codex_args for a workspace using the same priority chain as the Rust implementation:
+/// 1. Workspace's own settings.codexArgs
+/// 2. Parent workspace's settings.codexArgs (for worktrees)
+/// 3. App-level settings.codexArgs
+func resolveWorkspaceCodexArgs(
+  entry: WorkspaceEntry,
+  parentEntry: WorkspaceEntry? = nil,
+  appSettings: AppSettings? = nil
+) -> String? {
+  if let value = entry.settings.codexArgs?.trimmingCharacters(in: .whitespacesAndNewlines),
+     !value.isEmpty {
+    return value
+  }
+
+  if entry.kind.isWorktree(), let parent = parentEntry,
+     let value = parent.settings.codexArgs?.trimmingCharacters(in: .whitespacesAndNewlines),
+     !value.isEmpty {
+    return value
+  }
+
+  if let settings = appSettings,
+     let value = settings.codexArgs?.trimmingCharacters(in: .whitespacesAndNewlines),
+     !value.isEmpty {
+    return value
+  }
+
+  return nil
 }
 
 func withTimeout<T>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {

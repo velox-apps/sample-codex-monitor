@@ -5,8 +5,8 @@
   "identifier": "org.tirania.codexmonitor",
   "build": {
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "cd frontend && npm run dev",
-    "beforeBuildCommand": "cd frontend && npm run build",
+    "beforeDevCommand": "cd ../CodexMonitor && npm run dev",
+    "beforeBuildCommand": "cd ../CodexMonitor && npx vite build && cd ../velox-app && rm -rf frontend/dist && mkdir -p frontend && cp -r ../CodexMonitor/dist frontend/dist",
     "frontendDist": "frontend/dist"
   },
   "app": {
@@ -37,6 +37,19 @@
     ]
   },
   "bundle": {
-    "active": true
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": "icons/icon.icns",
+    "macos": {
+      "minimumSystemVersion": "13.0",
+      "infoPlist": "./Info.plist",
+      "entitlements": "./Entitlements.plist",
+      "hardenedRuntime": true,
+      "dmg": {
+        "enabled": true,
+        "name": "CodexMonitor",
+        "volumeName": "CodexMonitor"
+      }
+    }
   }
 }

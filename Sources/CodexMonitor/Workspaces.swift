@@ -39,10 +39,15 @@ func listWorkspaces(state: AppState) -> [WorkspaceInfo] {
 func addWorkspace(
   path: String,
   codexBin: String?,
+  codexArgs: String? = nil,
   state: AppState,
   eventManager: VeloxEventManager
 ) async throws -> WorkspaceInfo {
   let name = URL(fileURLWithPath: path).lastPathComponent
+  var settings = WorkspaceSettings()
+  if let args = codexArgs?.trimmingCharacters(in: .whitespacesAndNewlines), !args.isEmpty {
+    settings.codexArgs = args
+  }
   let entry = WorkspaceEntry(
     id: UUID().uuidString,
     name: name.isEmpty ? "Workspace" : name,
@@ -51,13 +56,16 @@ func addWorkspace(
     kind: .main,
     parentId: nil,
     worktree: nil,
-    settings: WorkspaceSettings()
+    settings: settings
   )
 
-  let defaultBin = state.getAppSettings().codexBin
+  let appSettings = state.getAppSettings()
+  let defaultBin = appSettings.codexBin
+  let resolvedArgs = resolveWorkspaceCodexArgs(entry: entry, appSettings: appSettings)
   let session = try await CodexManager.spawnWorkspaceSession(
     entry: entry,
     defaultCodexBin: defaultBin,
+    codexArgs: resolvedArgs,
     eventManager: eventManager
   )
 
@@ -113,10 +121,13 @@ func addWorktree(
     settings: WorkspaceSettings()
   )
 
-  let defaultBin = state.getAppSettings().codexBin
+  let appSettings = state.getAppSettings()
+  let defaultBin = appSettings.codexBin
+  let resolvedArgs = resolveWorkspaceCodexArgs(entry: entry, parentEntry: parentEntry, appSettings: appSettings)
   let session = try await CodexManager.spawnWorkspaceSession(
     entry: entry,
     defaultCodexBin: defaultBin,
+    codexArgs: resolvedArgs,
     eventManager: eventManager
   )
 
@@ -227,10 +238,14 @@ func connectWorkspace(id: String, state: AppState, eventManager: VeloxEventManag
   guard let entry = state.getWorkspace(id: id) else {
     throw CodexError(message: "workspace not found")
   }
-  let defaultBin = state.getAppSettings().codexBin
+  let appSettings = state.getAppSettings()
+  let defaultBin = appSettings.codexBin
+  let parentEntry = entry.parentId.flatMap { state.getWorkspace(id: $0) }
+  let resolvedArgs = resolveWorkspaceCodexArgs(entry: entry, parentEntry: parentEntry, appSettings: appSettings)
   let session = try await CodexManager.spawnWorkspaceSession(
     entry: entry,
     defaultCodexBin: defaultBin,
+    codexArgs: resolvedArgs,
     eventManager: eventManager
   )
   state.setSession(id: entry.id, session: session)

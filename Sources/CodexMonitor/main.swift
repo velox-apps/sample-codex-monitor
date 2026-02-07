@@ -255,7 +255,13 @@ func main() {
       }
       .run { event in
         switch event {
-        case .windowCloseRequested, .userExit:
+        case .windowCloseRequested:
+          windowState.hide()
+          return .wait
+        case .reopen:
+          windowState.show()
+          return .wait
+        case .userExit:
           return .exit
         default:
           return .wait

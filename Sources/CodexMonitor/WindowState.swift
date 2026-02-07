@@ -19,4 +19,17 @@ final class WindowState: @unchecked Sendable {
     }
     return window.startDragging()
   }
+
+  func hide() {
+    lock.lock()
+    defer { lock.unlock() }
+    window?.setVisible(false)
+  }
+
+  func show() {
+    lock.lock()
+    defer { lock.unlock() }
+    window?.setVisible(true)
+    _ = window?.focus()
+  }
 }

@@ -1,6 +1,10 @@
 import Foundation
 import VeloxRuntimeWry
 
+// MARK: - Window State
+
+/// Manages the window reference for hide/show/drag operations.
+/// Geometry persistence is handled by `WindowStatePlugin`.
 final class WindowState: @unchecked Sendable {
   private let lock = NSLock()
   private var window: VeloxRuntimeWry.Window?
@@ -14,9 +18,7 @@ final class WindowState: @unchecked Sendable {
   func startDragging() -> Bool {
     lock.lock()
     defer { lock.unlock() }
-    guard let window else {
-      return false
-    }
+    guard let window else { return false }
     return window.startDragging()
   }
 

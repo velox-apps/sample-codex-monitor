@@ -149,8 +149,13 @@ func main() {
   }
 
   let windowState = WindowState()
+
+  // Retains the native menu bar for the lifetime of the app.
+  var _menuBar: VeloxRuntimeWry.MenuBar?
+
   appBuilder.onWindowCreated("main") { window, webview in
     windowState.setWindow(window)
+    _menuBar = buildNativeMenuBar(eventManager: appBuilder.eventManager, windowState: windowState)
     if let webview {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
         let script = VeloxEventBridge.initScript + "\n" + VeloxInvokeBridge.initScript
@@ -160,6 +165,7 @@ func main() {
   }
 
   appBuilder.plugins {
+    WindowStatePlugin()
     DialogPlugin()
     OpenerPlugin()
     ProcessPlugin()
@@ -270,6 +276,7 @@ func main() {
   } catch {
     fatalError("CodexMonitor failed to start: \(error)")
   }
+  withExtendedLifetime(_menuBar) {}
 }
 
 main()

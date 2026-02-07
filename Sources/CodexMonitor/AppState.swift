@@ -174,9 +174,17 @@ final class TerminalSessionHandle: @unchecked Sendable {
   let masterFd: Int32
   let childPid: pid_t
   var readerSource: DispatchSourceRead?
+  var pendingBytes: [UInt8] = []
 
   init(masterFd: Int32, childPid: pid_t) {
     self.masterFd = masterFd
     self.childPid = childPid
+  }
+
+  func cleanup() {
+    readerSource?.cancel()
+    readerSource = nil
+    kill(childPid, SIGHUP)
+    close(masterFd)
   }
 }

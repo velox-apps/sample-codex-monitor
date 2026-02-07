@@ -97,6 +97,67 @@ private func resolveFilePath(scope: FileScope, kind: FileKind, workspaceId: Stri
   }
 }
 
+// MARK: - Auth.json Fallback
+
+struct AuthAccount {
+  let email: String?
+  let planType: String?
+}
+
+/// Reads `auth.json` from the given codex home directory and extracts
+/// account information (email, planType) from the JWT id_token.
+func readAuthAccount(codexHome: String?) -> AuthAccount? {
+  guard let codexHome = codexHome else { return nil }
+  let authPath = (codexHome as NSString).appendingPathComponent("auth.json")
+  guard let data = FileManager.default.contents(atPath: authPath) else { return nil }
+  guard let authValue = try? JSONDecoder().decode(JSONValue.self, from: data) else { return nil }
+  guard let tokens = authValue["tokens"] else { return nil }
+  let idToken = tokens["idToken"]?.stringValue ?? tokens["id_token"]?.stringValue
+  guard let idToken = idToken else { return nil }
+  guard let payload = decodeJwtPayload(idToken) else { return nil }
+
+  let authDict = payload["https://api.openai.com/auth"]?.objectValue
+  let profileDict = payload["https://api.openai.com/profile"]?.objectValue
+
+  let plan = normalizeAuthString(
+    authDict?["chatgpt_plan_type"]?.stringValue
+      ?? payload["chatgpt_plan_type"]?.stringValue
+  )
+  let email = normalizeAuthString(
+    payload["email"]?.stringValue
+      ?? profileDict?["email"]?.stringValue
+  )
+
+  guard email != nil || plan != nil else { return nil }
+  return AuthAccount(email: email, planType: plan)
+}
+
+/// Decodes the payload segment of a JWT token (base64url → JSON).
+private func decodeJwtPayload(_ token: String) -> JSONValue? {
+  let parts = token.split(separator: ".")
+  guard parts.count >= 2 else { return nil }
+  let payloadSegment = String(parts[1])
+
+  // Base64url → Base64: replace URL-safe chars and pad
+  var base64 = payloadSegment
+    .replacingOccurrences(of: "-", with: "+")
+    .replacingOccurrences(of: "_", with: "/")
+  let remainder = base64.count % 4
+  if remainder > 0 {
+    base64 += String(repeating: "=", count: 4 - remainder)
+  }
+
+  guard let decoded = Data(base64Encoded: base64) else { return nil }
+  return try? JSONDecoder().decode(JSONValue.self, from: decoded)
+}
+
+/// Trims and filters empty strings for auth field normalization.
+private func normalizeAuthString(_ value: String?) -> String? {
+  guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !trimmed.isEmpty else { return nil }
+  return trimmed
+}
+
 /// Read an arbitrary file relative to a workspace directory.
 func readWorkspaceFile(workspaceId: String, path: String, state: AppState) throws -> WorkspaceFileResponse {
   guard let entry = state.getWorkspace(id: workspaceId) else {

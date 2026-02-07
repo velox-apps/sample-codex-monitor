@@ -10,37 +10,55 @@ private func unwrapCodexResponse(_ response: JSONValue) -> JSONValue {
 }
 
 /// Matches the Rust `build_account_response` logic:
-/// Extracts the account map from various response shapes and wraps it as
-/// `{"account": {...}, "requiresOpenaiAuth": bool}`.
-private func buildAccountResponse(_ response: JSONValue) -> JSONValue {
-  let unwrapped = unwrapCodexResponse(response)
+/// Extracts the account map from various response shapes, applies the
+/// auth.json JWT fallback when the account is empty or type is chatgpt/unknown,
+/// and wraps as `{"account": {...}, "requiresOpenaiAuth": bool}`.
+private func buildAccountResponse(_ response: JSONValue?, fallback: AuthAccount? = nil) -> JSONValue {
+  let unwrapped = response.map { unwrapCodexResponse($0) }
 
   // Try to find the account object from various locations.
-  var account: [String: JSONValue]?
-  if let obj = unwrapped["account"]?.objectValue {
-    account = obj
-  } else if let resultObj = unwrapped["result"]?.objectValue, let obj = resultObj["account"]?.objectValue {
-    account = obj
-  } else if let root = unwrapped.objectValue {
-    // Flat fields at the top level (no "account" wrapper)
-    if root["email"] != nil || root["planType"] != nil || root["type"] != nil {
-      account = root
+  var account: [String: JSONValue] = [:]
+  if let unwrapped {
+    if let obj = unwrapped["account"]?.objectValue {
+      account = obj
+    } else if let resultObj = unwrapped["result"]?.objectValue, let obj = resultObj["account"]?.objectValue {
+      account = obj
+    } else if let root = unwrapped.objectValue {
+      if root["email"] != nil || root["planType"] != nil || root["type"] != nil {
+        account = root
+      }
+    }
+  }
+
+  // Apply fallback from auth.json JWT when allowed.
+  if let fallback {
+    let accountType = account["type"]?.stringValue?.lowercased()
+    let allowFallback = account.isEmpty
+      || accountType == nil || accountType == "chatgpt" || accountType == "unknown"
+    if allowFallback {
+      if account["email"] == nil, let email = fallback.email {
+        account["email"] = .string(email)
+      }
+      if account["planType"] == nil, let plan = fallback.planType {
+        account["planType"] = .string(plan)
+      }
+      if account["type"] == nil {
+        account["type"] = .string("chatgpt")
+      }
     }
   }
 
   // Extract requiresOpenaiAuth from various locations.
-  let requiresAuth: Bool? =
-    unwrapped["requiresOpenaiAuth"]?.boolValue
-    ?? unwrapped["requires_openai_auth"]?.boolValue
-    ?? unwrapped["result"]?["requiresOpenaiAuth"]?.boolValue
-    ?? unwrapped["result"]?["requires_openai_auth"]?.boolValue
+  let requiresAuth: Bool? = {
+    guard let unwrapped else { return nil }
+    return unwrapped["requiresOpenaiAuth"]?.boolValue
+      ?? unwrapped["requires_openai_auth"]?.boolValue
+      ?? unwrapped["result"]?["requiresOpenaiAuth"]?.boolValue
+      ?? unwrapped["result"]?["requires_openai_auth"]?.boolValue
+  }()
 
   var result: [String: JSONValue] = [:]
-  if let account {
-    result["account"] = .object(account)
-  } else {
-    result["account"] = .null
-  }
+  result["account"] = account.isEmpty ? .null : .object(account)
   if let requiresAuth {
     result["requiresOpenaiAuth"] = .bool(requiresAuth)
   }
@@ -1308,24 +1326,20 @@ func registerCommands(
   registry.register("account_read", args: WorkspaceIdArgs.self, returning: DeferredCommandResponse.self) { args, context in
     let deferred = try context.deferResponse()
     Task {
-      do {
-        guard let session = state.getSession(id: args.workspaceId) else {
-          throw CodexError(message: "workspace not connected")
-        }
-        AppLogger.log("account_read: sending request for \(args.workspaceId)", level: .info)
-        let response = try await session.sendRequest(method: "account/read", params: .null)
-        if let rawData = try? JSONEncoder().encode(response), let rawJson = String(data: rawData, encoding: .utf8) {
-          AppLogger.log("account_read: raw response=\(rawJson)", level: .info)
-        }
-        let result = buildAccountResponse(response)
-        if let data = try? JSONEncoder().encode(result), let json = String(data: data, encoding: .utf8) {
-          AppLogger.log("account_read: result=\(json)", level: .info)
-        }
-        deferred.responder.resolve(result)
-      } catch {
-        AppLogger.log("account_read: error=\(error)", level: .error)
-        deferred.responder.reject(code: "Error", message: errorMessage(error))
-      }
+      // Try to get account from app-server (tolerate failure).
+      let session = state.getSession(id: args.workspaceId)
+      let response: JSONValue? = try? await session?.sendRequest(method: "account/read", params: .null)
+
+      // Read auth.json JWT as fallback.
+      let entry = state.getWorkspace(id: args.workspaceId)
+      let codexHome: String? = {
+        guard let entry else { return resolveDefaultCodexHome() }
+        let parent = entry.parentId.flatMap { state.getWorkspace(id: $0) }
+        return resolveWorkspaceCodexHome(entry: entry, parent: parent, state: state)
+      }()
+      let fallback = readAuthAccount(codexHome: codexHome)
+
+      deferred.responder.resolve(buildAccountResponse(response, fallback: fallback))
     }
     return deferred.pending
   }
@@ -1598,7 +1612,6 @@ func registerCommands(
         guard let session = state.getSession(id: args.workspaceId) else {
           throw CodexError(message: "workspace not connected")
         }
-        AppLogger.log("codex_login: starting for workspace \(args.workspaceId)", level: .info)
         // Cancel any existing login
         if let existing = state.removeLoginCancel(workspaceId: args.workspaceId) {
           if case .pendingStart(let cancel) = existing {
@@ -1616,8 +1629,6 @@ func registerCommands(
         guard let authUrl = payload["authUrl"]?.stringValue ?? payload["auth_url"]?.stringValue else {
           throw CodexError(message: "missing authUrl in login response")
         }
-        AppLogger.log("codex_login: got loginId=\(loginId) authUrl=\(authUrl)", level: .info)
-
         state.setLoginCancel(workspaceId: args.workspaceId, state: .loginId(loginId))
 
         let result = JSONValue.object([

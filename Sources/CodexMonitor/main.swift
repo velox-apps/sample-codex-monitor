@@ -153,7 +153,7 @@ func main() {
     windowState.setWindow(window)
     if let webview {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-        let script = VeloxEventBridge.initScript + "\n" + VeloxInvokeBridge.initScript + "\n" + TauriCompat.shimScript
+        let script = VeloxEventBridge.initScript + "\n" + VeloxInvokeBridge.initScript
         _ = webview.evaluate(script: script)
       }
     }

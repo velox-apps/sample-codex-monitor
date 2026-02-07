@@ -22,7 +22,7 @@ func createCommandHandlerWithFallback(
     }
 
     if let webviewHandle {
-      let script = VeloxEventBridge.initScript + "\n" + VeloxInvokeBridge.initScript + "\n" + TauriCompat.shimScript
+      let script = VeloxEventBridge.initScript + "\n" + VeloxInvokeBridge.initScript
       _ = webviewHandle.evaluate(script: script)
     }
 

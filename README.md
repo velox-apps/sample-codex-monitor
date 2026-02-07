@@ -45,6 +45,13 @@ cd velox-app/frontend
 npm install
 ```
 
+Build velox once, this needs to be done before, so you do not trigger the SwiftPM sandbox:
+
+```
+cd ../velox
+make
+```
+
 Run in dev mode:
 
 ```bash

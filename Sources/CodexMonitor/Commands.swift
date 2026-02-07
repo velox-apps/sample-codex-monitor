@@ -1891,38 +1891,54 @@ func registerCommands(
     return deferred.pending
   }
 
-  // MARK: - Stubs: Dictation (not yet implemented)
+  // MARK: - Dictation
 
   registry.register("dictation_model_status", args: DictationModelIdArgs.self, returning: DictationModelStatusResponse.self) { args, _ in
-    DictationModelStatusResponse(state: "missing", modelId: args.modelId ?? "default", progress: nil, error: nil, path: nil)
+    dictationModelStatus(modelId: args.modelId, state: state)
   }
 
   registry.register("dictation_download_model", args: DictationModelIdArgs.self, returning: DictationModelStatusResponse.self) { args, _ in
-    DictationModelStatusResponse(state: "missing", modelId: args.modelId ?? "default", progress: nil, error: "Dictation not available in this build", path: nil)
+    dictationDownloadModel(modelId: args.modelId, state: state, eventManager: eventManager)
   }
 
   registry.register("dictation_cancel_download", args: DictationModelIdArgs.self, returning: DictationModelStatusResponse.self) { args, _ in
-    DictationModelStatusResponse(state: "missing", modelId: args.modelId ?? "default", progress: nil, error: nil, path: nil)
+    dictationCancelDownload(modelId: args.modelId, state: state, eventManager: eventManager)
   }
 
   registry.register("dictation_remove_model", args: DictationModelIdArgs.self, returning: DictationModelStatusResponse.self) { args, _ in
-    DictationModelStatusResponse(state: "missing", modelId: args.modelId ?? "default", progress: nil, error: nil, path: nil)
+    dictationRemoveModel(modelId: args.modelId, state: state, eventManager: eventManager)
   }
 
-  registry.register("dictation_start", args: DictationStartArgs.self, returning: String.self) { _, _ in
-    "idle"
+  registry.register("dictation_start", args: DictationStartArgs.self, returning: DeferredCommandResponse.self) { args, context in
+    let deferred = try context.deferResponse()
+    Task {
+      do {
+        try dictationStart(preferredLanguage: args.preferredLanguage, state: state, eventManager: eventManager)
+        deferred.responder.resolve("listening")
+      } catch {
+        deferred.responder.reject(code: "Error", message: errorMessage(error))
+      }
+    }
+    return deferred.pending
   }
 
   registry.register("dictation_stop", returning: String.self) { _ in
-    "idle"
+    dictationStop(state: state, eventManager: eventManager)
+    return "processing"
   }
 
   registry.register("dictation_cancel", returning: String.self) { _ in
-    "idle"
+    dictationCancel(state: state, eventManager: eventManager)
+    return "idle"
   }
 
-  registry.register("dictation_request_permission", returning: Bool.self) { _ in
-    false
+  registry.register("dictation_request_permission", returning: DeferredCommandResponse.self) { context in
+    let deferred = try context.deferResponse()
+    Task {
+      let granted = await dictationRequestPermission()
+      deferred.responder.resolve(granted)
+    }
+    return deferred.pending
   }
 
   // MARK: - Stubs: Tauri Plugin Compat

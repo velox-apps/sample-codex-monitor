@@ -8,6 +8,7 @@ final class AppState: @unchecked Sendable {
   private var appSettings: AppSettings
   private var loginCancels: [String: LoginCancelState] = [:]
   private var terminalSessions: [String: TerminalSessionHandle] = [:]
+  private var dictation: DictationManager
   let storagePath: URL
   let settingsPath: URL
 
@@ -23,6 +24,7 @@ final class AppState: @unchecked Sendable {
     self.appSettings = appSettings
     self.storagePath = storagePath
     self.settingsPath = settingsPath
+    self.dictation = DictationManager(baseDir: storagePath.deletingLastPathComponent())
   }
 
   static func load(config: VeloxConfig) -> AppState {
@@ -138,6 +140,20 @@ final class AppState: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return loginCancels.removeValue(forKey: workspaceId)
+  }
+
+  // MARK: - Dictation
+
+  func getDictation() -> DictationManager {
+    lock.lock()
+    defer { lock.unlock() }
+    return dictation
+  }
+
+  func withDictation(_ body: (DictationManager) -> Void) {
+    lock.lock()
+    defer { lock.unlock() }
+    body(dictation)
   }
 
   // MARK: - Terminal Sessions

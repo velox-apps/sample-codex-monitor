@@ -10,7 +10,8 @@ let package = Package(
     .executable(name: "CodexMonitor", targets: ["CodexMonitor"])
   ],
   dependencies: [
-    .package(name: "VeloxRuntimeWry", path: "../velox")
+    .package(name: "VeloxRuntimeWry", path: "../velox"),
+    .package(name: "VoxtralFoundation", path: "../VoxtralFoundation")
   ],
   targets: [
     .target(
@@ -23,7 +24,11 @@ let package = Package(
         .product(name: "VeloxRuntime", package: "VeloxRuntimeWry"),
         .product(name: "VeloxRuntimeWry", package: "VeloxRuntimeWry"),
         .product(name: "VeloxPlugins", package: "VeloxRuntimeWry"),
+        .product(name: "VoxtralFoundation", package: "VoxtralFoundation"),
         "CTerminalHelpers"
+      ],
+      linkerSettings: [
+        .linkedFramework("AVFoundation")
       ]
     )
   ]

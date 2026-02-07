@@ -24,41 +24,63 @@ enum TauriCompat {
     }
 
     // --------------- event system bridge ----------------
-    var _listeners = {};
-    var _listenerId = 0;
+    // Maps Velox listener IDs to unlisten functions for cleanup
+    var _veloxListenerIds = {};
+    var _tauriEventId = 0;
 
-    function tauriListen(event, handler) {
-      var id = ++_listenerId;
-      if (!_listeners[event]) _listeners[event] = {};
-      _listeners[event][id] = handler;
+    function tauriListen(event, handlerRef) {
+      // handlerRef is a callback ID string from transformCallback
+      var realHandler = (typeof handlerRef === 'function')
+        ? handlerRef
+        : _cbs[handlerRef];
 
-      if (window.Velox && window.Velox.event && window.Velox.event.listen) {
-        window.Velox.event.listen(event, handler);
+      if (!realHandler) {
+        console.warn('[TauriCompat] No handler found for', handlerRef);
+        return Promise.resolve(0);
       }
 
-      return Promise.resolve(function unlisten() {
-        if (_listeners[event]) delete _listeners[event][id];
-      });
+      var eventId = ++_tauriEventId;
+
+      // Register directly with Velox's native event system so that
+      // backend _emit() calls reach us.
+      if (window.Velox && window.Velox.event && window.Velox.event.listen) {
+        var veloxId = window.Velox.event.listen(event, function(veloxEvent) {
+          // Convert Velox event shape {name, payload, id, timestamp}
+          // to Tauri event shape {event, payload, id}
+          try {
+            if (event === 'app-server-event') {
+              var msg = veloxEvent.payload && veloxEvent.payload.message;
+              console.log('[TauriCompat] app-server-event method=' +
+                (msg && msg.method) + ' params=' + JSON.stringify(msg && msg.params));
+            }
+            realHandler({
+              event: veloxEvent.name || event,
+              payload: veloxEvent.payload,
+              id: veloxEvent.id || eventId
+            });
+          } catch(e) {
+            console.error('[TauriCompat] Event handler error:', e);
+          }
+        });
+        _veloxListenerIds[eventId] = veloxId;
+      }
+
+      return Promise.resolve(eventId);
     }
 
-    function tauriUnlisten(event, handlerId) {
-      if (_listeners[event]) delete _listeners[event][handlerId];
+    function tauriUnlisten(event, eventId) {
+      var veloxId = _veloxListenerIds[eventId];
+      if (veloxId != null && window.Velox && window.Velox.event) {
+        window.Velox.event.unlisten(veloxId);
+      }
+      delete _veloxListenerIds[eventId];
     }
 
     function tauriEmit(event, payload) {
-      var handlers = _listeners[event];
-      if (handlers) {
-        Object.keys(handlers).forEach(function(id) {
-          try { handlers[id]({ event: event, payload: payload }); } catch(e) {}
-        });
+      // Emit to backend via Velox
+      if (window.Velox && window.Velox.event && window.Velox.event.emit) {
+        return window.Velox.event.emit(event, payload);
       }
-    }
-
-    // Hook into Velox event system for backend→frontend events
-    if (window.Velox && window.Velox.event && window.Velox.event.listen) {
-      var origVeloxListen = window.Velox.event.listen.bind(window.Velox.event);
-      // Patch Velox listen to also notify Tauri-style listeners
-      window.Velox.event._patchedListen = origVeloxListen;
     }
 
     // --------------- invoke bridge ----------------
@@ -68,6 +90,7 @@ enum TauriCompat {
         return tauriListen(args.event, args.handler);
       }
       if (cmd === 'plugin:event|unlisten') {
+        tauriUnlisten(args.event, args.eventId);
         return Promise.resolve();
       }
       if (cmd === 'plugin:event|emit') {
@@ -107,7 +130,11 @@ enum TauriCompat {
 
     // Provide event helpers at the expected paths for @tauri-apps/api/event
     window.__TAURI__.event = {
-      listen: tauriListen,
+      listen: function(event, handler) {
+        // This path is called directly by code that uses @tauri-apps/api/event
+        // without going through invoke. The handler here is the real function.
+        return tauriListen(event, handler);
+      },
       emit: tauriEmit,
       TauriEvent: {
         WINDOW_CLOSE_REQUESTED: 'tauri://close-requested'
@@ -123,16 +150,6 @@ enum TauriCompat {
     // Also expose under path
     window.__TAURI__.path = window.__TAURI__.path || {};
     window.__TAURI__.window = window.__TAURI__.window || {};
-
-    // --------------- global event dispatch from Velox ----------------
-    // When Velox emits events, forward them to the Tauri listener registry
-    if (window.Velox && window.Velox.event) {
-      var origEmit = window.Velox.event.emit;
-      window.Velox.event.emit = function(event, payload) {
-        tauriEmit(event, payload);
-        if (origEmit) return origEmit.call(window.Velox.event, event, payload);
-      };
-    }
   })();
   """
 }

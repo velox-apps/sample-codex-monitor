@@ -10,7 +10,7 @@ let package = Package(
     .executable(name: "CodexMonitor", targets: ["CodexMonitor"])
   ],
   dependencies: [
-    .package(name: "VeloxRuntimeWry", path: "../../velox")
+    .package(name: "VeloxRuntimeWry", path: "../velox")
   ],
   targets: [
     .target(

@@ -2,7 +2,7 @@
   "$schema": "https://velox-apps.github.io/velox/schema.json",
   "productName": "CodexMonitor",
   "version": "0.5.0",
-  "identifier": "com.dimillian.codexmonitor",
+  "identifier": "org.tirania.codexmonitor",
   "build": {
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "cd frontend && npm run dev",

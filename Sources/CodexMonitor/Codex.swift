@@ -39,11 +39,19 @@ actor WorkspaceSession {
     return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<JSONValue, Error>) in
       pending[id] = cont
       do {
-        try writeMessage(JSONValue.object([
+        var msg: [String: JSONValue] = [
           "id": .number(Double(id)),
-          "method": .string(method),
-          "params": params
-        ]))
+          "method": .string(method)
+        ]
+        // Omit params when null; send empty object for .null to satisfy
+        // app-server deserializers that require the field to be present.
+        switch params {
+        case .null:
+          msg["params"] = .object([:])
+        default:
+          msg["params"] = params
+        }
+        try writeMessage(.object(msg))
       } catch {
         pending.removeValue(forKey: id)
         cont.resume(throwing: error)
@@ -108,11 +116,19 @@ actor WorkspaceSession {
   }
 
   private func emitEvent(eventManager: VeloxEventManager, workspaceId: String, message: JSONValue) {
+    let method = message["method"]?.stringValue ?? "unknown"
+    if method.contains("account") || method.contains("login") {
+      if let data = try? JSONEncoder().encode(message), let json = String(data: data, encoding: .utf8) {
+        AppLogger.log("EMIT app-server-event method=\(method) message=\(json)", level: .info)
+      } else {
+        AppLogger.log("EMIT app-server-event method=\(method)", level: .info)
+      }
+    }
     let payload = AppServerEvent(workspace_id: workspaceId, message: message)
     do {
       try eventManager.emit("app-server-event", payload: payload)
     } catch {
-      // Ignore emit errors.
+      AppLogger.log("EMIT ERROR: \(error)", level: .error)
     }
   }
 }

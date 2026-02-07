@@ -98,6 +98,17 @@ enum TauriCompat {
         return Promise.resolve();
       }
 
+      if (cmd === 'plugin:dialog|open') {
+        var opts = args && args.options ? args.options : (args || {});
+        return window.Velox.invoke(cmd, args || {}).then(function(result) {
+          if (!opts || opts.multiple) return result;
+          if (Array.isArray(result)) {
+            return result.length > 0 ? result[0] : null;
+          }
+          return result;
+        });
+      }
+
       // Delegate to Velox invoke
       if (window.Velox && window.Velox.invoke) {
         return window.Velox.invoke(cmd, args || {});
@@ -110,6 +121,9 @@ enum TauriCompat {
     window.__TAURI_INTERNALS__ = {
       invoke: tauriInvoke,
       transformCallback: transformCallback,
+      unregisterCallback: function(id) {
+        delete _cbs[id];
+      },
       metadata: {
         currentWindow: { label: 'main' },
         currentWebview: { label: 'main' },
@@ -119,6 +133,14 @@ enum TauriCompat {
       convertFileSrc: function(path, protocol) {
         protocol = protocol || 'asset';
         return protocol + '://localhost/' + encodeURIComponent(path);
+      }
+    };
+
+    // --------------- event plugin internals ----------------
+    // Required by @tauri-apps/api/event _unlisten() to clean up listeners
+    window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+      unregisterListener: function(event, eventId) {
+        tauriUnlisten(event, eventId);
       }
     };
 

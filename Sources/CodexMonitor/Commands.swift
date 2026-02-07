@@ -9,6 +9,44 @@ private func unwrapCodexResponse(_ response: JSONValue) -> JSONValue {
   return response
 }
 
+/// Matches the Rust `build_account_response` logic:
+/// Extracts the account map from various response shapes and wraps it as
+/// `{"account": {...}, "requiresOpenaiAuth": bool}`.
+private func buildAccountResponse(_ response: JSONValue) -> JSONValue {
+  let unwrapped = unwrapCodexResponse(response)
+
+  // Try to find the account object from various locations.
+  var account: [String: JSONValue]?
+  if let obj = unwrapped["account"]?.objectValue {
+    account = obj
+  } else if let resultObj = unwrapped["result"]?.objectValue, let obj = resultObj["account"]?.objectValue {
+    account = obj
+  } else if let root = unwrapped.objectValue {
+    // Flat fields at the top level (no "account" wrapper)
+    if root["email"] != nil || root["planType"] != nil || root["type"] != nil {
+      account = root
+    }
+  }
+
+  // Extract requiresOpenaiAuth from various locations.
+  let requiresAuth: Bool? =
+    unwrapped["requiresOpenaiAuth"]?.boolValue
+    ?? unwrapped["requires_openai_auth"]?.boolValue
+    ?? unwrapped["result"]?["requiresOpenaiAuth"]?.boolValue
+    ?? unwrapped["result"]?["requires_openai_auth"]?.boolValue
+
+  var result: [String: JSONValue] = [:]
+  if let account {
+    result["account"] = .object(account)
+  } else {
+    result["account"] = .null
+  }
+  if let requiresAuth {
+    result["requiresOpenaiAuth"] = .bool(requiresAuth)
+  }
+  return .object(result)
+}
+
 struct WorkspaceIdArgs: Codable, Sendable {
   let workspaceId: String
 }
@@ -1274,9 +1312,18 @@ func registerCommands(
         guard let session = state.getSession(id: args.workspaceId) else {
           throw CodexError(message: "workspace not connected")
         }
+        AppLogger.log("account_read: sending request for \(args.workspaceId)", level: .info)
         let response = try await session.sendRequest(method: "account/read", params: .null)
-        deferred.responder.resolve(unwrapCodexResponse(response))
+        if let rawData = try? JSONEncoder().encode(response), let rawJson = String(data: rawData, encoding: .utf8) {
+          AppLogger.log("account_read: raw response=\(rawJson)", level: .info)
+        }
+        let result = buildAccountResponse(response)
+        if let data = try? JSONEncoder().encode(result), let json = String(data: data, encoding: .utf8) {
+          AppLogger.log("account_read: result=\(json)", level: .info)
+        }
+        deferred.responder.resolve(result)
       } catch {
+        AppLogger.log("account_read: error=\(error)", level: .error)
         deferred.responder.reject(code: "Error", message: errorMessage(error))
       }
     }
@@ -1551,6 +1598,7 @@ func registerCommands(
         guard let session = state.getSession(id: args.workspaceId) else {
           throw CodexError(message: "workspace not connected")
         }
+        AppLogger.log("codex_login: starting for workspace \(args.workspaceId)", level: .info)
         // Cancel any existing login
         if let existing = state.removeLoginCancel(workspaceId: args.workspaceId) {
           if case .pendingStart(let cancel) = existing {
@@ -1568,6 +1616,7 @@ func registerCommands(
         guard let authUrl = payload["authUrl"]?.stringValue ?? payload["auth_url"]?.stringValue else {
           throw CodexError(message: "missing authUrl in login response")
         }
+        AppLogger.log("codex_login: got loginId=\(loginId) authUrl=\(authUrl)", level: .info)
 
         state.setLoginCancel(workspaceId: args.workspaceId, state: .loginId(loginId))
 

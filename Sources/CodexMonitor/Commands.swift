@@ -90,6 +90,8 @@ struct AddWorkspaceArgs: Codable, Sendable {
 struct AddWorktreeArgs: Codable, Sendable {
   let parentId: String
   let branch: String
+  let name: String?
+  let copyAgentsMd: Bool?
 }
 
 struct IdArgs: Codable, Sendable {
@@ -404,6 +406,8 @@ func registerCommands(
         let info = try await addWorktree(
           parentId: args.parentId,
           branch: args.branch,
+          name: args.name,
+          copyAgentsMd: args.copyAgentsMd ?? true,
           state: state,
           eventManager: eventManager
         )

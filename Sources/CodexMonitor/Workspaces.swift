@@ -79,6 +79,8 @@ func addWorkspace(
 func addWorktree(
   parentId: String,
   branch: String,
+  name: String? = nil,
+  copyAgentsMd: Bool = true,
   state: AppState,
   eventManager: VeloxEventManager
 ) async throws -> WorkspaceInfo {
@@ -86,6 +88,9 @@ func addWorktree(
   guard !trimmed.isEmpty else {
     throw CodexError(message: "Branch name is required.")
   }
+
+  let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+  let resolvedName = (displayName?.isEmpty ?? true) ? trimmed : displayName!
 
   guard let parentEntry = state.getWorkspace(id: parentId) else {
     throw CodexError(message: "parent workspace not found")
@@ -110,15 +115,28 @@ func addWorktree(
     _ = try await runGitCommand(repoPath: URL(fileURLWithPath: parentEntry.path), args: ["worktree", "add", "-b", trimmed, worktreePathString])
   }
 
+  if copyAgentsMd {
+    copyAgentsMdFromParent(
+      parentPath: URL(fileURLWithPath: parentEntry.path),
+      worktreePath: worktreePath
+    )
+  }
+
+  var worktreeSettings = WorkspaceSettings()
+  if let setupScript = parentEntry.settings.worktreeSetupScript?.trimmingCharacters(in: .whitespacesAndNewlines),
+     !setupScript.isEmpty {
+    worktreeSettings.worktreeSetupScript = setupScript
+  }
+
   let entry = WorkspaceEntry(
     id: UUID().uuidString,
-    name: trimmed,
+    name: resolvedName,
     path: worktreePathString,
     codex_bin: parentEntry.codex_bin,
     kind: .worktree,
     parentId: parentEntry.id,
     worktree: WorktreeInfo(branch: trimmed),
-    settings: WorkspaceSettings()
+    settings: worktreeSettings
   )
 
   let appSettings = state.getAppSettings()
@@ -136,6 +154,25 @@ func addWorktree(
   try Storage.writeWorkspaces(state.listWorkspaces(), to: state.storagePath)
 
   return workspaceInfo(from: entry, connected: true)
+}
+
+/// Copy AGENTS.md from parent repo root to worktree root.
+/// Uses atomic copy (write to .tmp then rename). Non-fatal on failure.
+private func copyAgentsMdFromParent(parentPath: URL, worktreePath: URL) {
+  let source = parentPath.appendingPathComponent("AGENTS.md")
+  guard FileManager.default.fileExists(atPath: source.path) else { return }
+
+  let dest = worktreePath.appendingPathComponent("AGENTS.md")
+  guard !FileManager.default.fileExists(atPath: dest.path) else { return }
+
+  let tmp = worktreePath.appendingPathComponent("AGENTS.md.tmp")
+  do {
+    try FileManager.default.copyItem(at: source, to: tmp)
+    try FileManager.default.moveItem(at: tmp, to: dest)
+  } catch {
+    try? FileManager.default.removeItem(at: tmp)
+    AppLogger.log("add_worktree: optional AGENTS.md copy failed: \(error)", level: .warn)
+  }
 }
 
 func removeWorkspace(id: String, state: AppState) async throws {

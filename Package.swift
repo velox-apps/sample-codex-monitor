@@ -13,12 +13,17 @@ let package = Package(
     .package(name: "VeloxRuntimeWry", path: "../../velox")
   ],
   targets: [
+    .target(
+      name: "CTerminalHelpers",
+      publicHeadersPath: "include"
+    ),
     .executableTarget(
       name: "CodexMonitor",
       dependencies: [
         .product(name: "VeloxRuntime", package: "VeloxRuntimeWry"),
         .product(name: "VeloxRuntimeWry", package: "VeloxRuntimeWry"),
-        .product(name: "VeloxPlugins", package: "VeloxRuntimeWry")
+        .product(name: "VeloxPlugins", package: "VeloxRuntimeWry"),
+        "CTerminalHelpers"
       ]
     )
   ]

@@ -6,6 +6,8 @@ final class AppState: @unchecked Sendable {
   private var workspaces: [String: WorkspaceEntry]
   private var sessions: [String: WorkspaceSession]
   private var appSettings: AppSettings
+  private var loginCancels: [String: LoginCancelState] = [:]
+  private var terminalSessions: [String: TerminalSessionHandle] = [:]
   let storagePath: URL
   let settingsPath: URL
 
@@ -116,5 +118,65 @@ final class AppState: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     appSettings = settings
+  }
+
+  // MARK: - Login Cancels
+
+  func getLoginCancel(workspaceId: String) -> LoginCancelState? {
+    lock.lock()
+    defer { lock.unlock() }
+    return loginCancels[workspaceId]
+  }
+
+  func setLoginCancel(workspaceId: String, state: LoginCancelState) {
+    lock.lock()
+    defer { lock.unlock() }
+    loginCancels[workspaceId] = state
+  }
+
+  func removeLoginCancel(workspaceId: String) -> LoginCancelState? {
+    lock.lock()
+    defer { lock.unlock() }
+    return loginCancels.removeValue(forKey: workspaceId)
+  }
+
+  // MARK: - Terminal Sessions
+
+  func getTerminal(id: String) -> TerminalSessionHandle? {
+    lock.lock()
+    defer { lock.unlock() }
+    return terminalSessions[id]
+  }
+
+  func setTerminal(id: String, handle: TerminalSessionHandle) {
+    lock.lock()
+    defer { lock.unlock() }
+    terminalSessions[id] = handle
+  }
+
+  func removeTerminal(id: String) -> TerminalSessionHandle? {
+    lock.lock()
+    defer { lock.unlock() }
+    return terminalSessions.removeValue(forKey: id)
+  }
+}
+
+// MARK: - Login Cancel State
+
+enum LoginCancelState: @unchecked Sendable {
+  case pendingStart((() -> Void))
+  case loginId(String)
+}
+
+// MARK: - Terminal Session Handle
+
+final class TerminalSessionHandle: @unchecked Sendable {
+  let masterFd: Int32
+  let childPid: pid_t
+  var readerSource: DispatchSourceRead?
+
+  init(masterFd: Int32, childPid: pid_t) {
+    self.masterFd = masterFd
+    self.childPid = childPid
   }
 }

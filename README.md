@@ -4,11 +4,10 @@
 
 CodexMonitor is a macOS desktop app for orchestrating multiple Codex agents across local workspaces.
 
-This is a test to see if Velox would work as a replacement for Tauri,
-so I asked Codex to port the original Tauri version from:
-https://github.com/Dimillian/CodexMonitor
-
-This repository contains a Swift/Velox port of the original Tauri/Rust app. 
+This is a Swift/Velox port of the Tauri/Rust app from
+[Dimillian/CodexMonitor](https://github.com/Dimillian/CodexMonitor),
+ported at commit [`cab9dde`](https://github.com/Dimillian/CodexMonitor/commit/cab9dde535afa99ccfb079377a455ff435e5a55d)
+(chore: bump version to 0.7.45).
 
 ## What It Does
 
@@ -19,13 +18,24 @@ This repository contains a Swift/Velox port of the original Tauri/Rust app.
 - Browse git status, diffs, and logs per workspace.
 - Track model usage, rate limits, and per-turn plans.
 
-## Project Layout
+## Project Setup
+
+This repository (`sample-codex-monitor`) expects the CodexMonitor frontend
+source to live alongside the `velox-app/` directory. Clone both repositories
+into the same parent folder:
+
+```bash
+git clone https://github.com/Dimillian/CodexMonitor
+git clone https://github.com/<you>/sample-codex-monitor velox-app
+```
+
+Resulting layout:
 
 ```
-CodexMonitor/          Frontend source (React + Vite)
-velox-app/             Swift backend + Velox config
-velox-app/frontend/    Copy of the frontend used by Velox builds
-original/              Original Tauri/Rust app (reference)
+CodexMonitor/          Frontend source (React + Vite) — cloned from upstream
+velox-app/             Swift backend + Velox config (this repo)
+velox-app/frontend/    Built frontend assets copied during build
+velox/                 Velox runtime (Swift build tool)
 ```
 
 ## Requirements
@@ -91,4 +101,4 @@ attribute automatically. If you launch manually, use
 
 ## Credits
 
-This is a Swift/Velox port of the original Tauri/Rust CodexMonitor app. The original implementation and assets are preserved in `original/` for reference.
+This is a Swift/Velox port of [CodexMonitor](https://github.com/Dimillian/CodexMonitor) by [@Dimillian](https://github.com/Dimillian).

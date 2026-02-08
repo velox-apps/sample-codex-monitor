@@ -1,6 +1,6 @@
 .PHONY: dev-frontend dev-backend dev build-frontend build bundle run clean
 
-FRONTEND_DIR := ../original
+FRONTEND_DIR := ../CodexMonitor
 DIST_TARGET  := frontend/dist
 VELOX        := ../velox/.build/release/velox
 
